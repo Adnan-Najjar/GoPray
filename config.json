@@ -1,0 +1,89 @@
+{
+    "Fajr": {
+        "Delay": 0,
+        "Command": [],
+        "Before": {
+            "Reminder": 0,
+            "Command": []
+        },
+        "After": {
+            "Reminder": 15,
+            "Command": [
+                "loginctl",
+                "lock-session"
+            ]
+        }
+    },
+    "Sunrise": {
+        "Delay": 0,
+        "Command": [],
+        "Before": {
+            "Reminder": 0,
+            "Command": []
+        },
+        "After": {
+            "Reminder": 0,
+            "Command": []
+        }
+    },
+    "Zuhr": {
+        "Delay": 0,
+        "Command": [],
+        "Before": {
+            "Reminder": 0,
+            "Command": []
+        },
+        "After": {
+            "Reminder": 15,
+            "Command": [
+                "loginctl",
+                "lock-session"
+            ]
+        }
+    },
+    "Asr": {
+        "Delay": 0,
+        "Command": [],
+        "Before": {
+            "Reminder": 0,
+            "Command": []
+        },
+        "After": {
+            "Reminder": 15,
+            "Command": [
+                "loginctl",
+                "lock-session"
+            ]
+        }
+    },
+    "Maghrib": {
+        "Delay": 0,
+        "Command": [],
+        "Before": {
+            "Reminder": 0,
+            "Command": []
+        },
+        "After": {
+            "Reminder": 0,
+            "Command": [
+                "loginctl",
+                "lock-session"
+            ]
+        }
+    },
+    "Isha": {
+        "Delay": 0,
+        "Command": [],
+        "Before": {
+            "Reminder": 0,
+            "Command": []
+        },
+        "After": {
+            "Reminder": 15,
+            "Command": [
+                "loginctl",
+                "lock-session"
+            ]
+        }
+    }
+}
