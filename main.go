@@ -17,6 +17,8 @@ import (
 
 type PrayerTimes struct {
 	LastUpdate string `json:"LastUpdate"`
+	CityName   string `json:"CityName"`
+	CityID     int    `json:"CityID"`
 	Fajr       string `json:"Fajr"`
 	Sunrise    string `json:"Sunrise"`
 	Zuhr       string `json:"Zuhr"`
@@ -41,19 +43,19 @@ type PrayerConfig struct {
 type Config map[string]PrayerConfig
 
 func getCityName() (string, error) {
-	resp, err := http.Get("https://ipapi.co/city/")
-	if err != nil {
+	resp, err := http.Get("http://ip-api.com/line?fields=city")
+	if err != nil || resp.StatusCode != 200 {
 		return "", err
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	return string(body), nil
+	return strings.Trim(string(body), "\n"), nil
 }
 
 func getCityID(city string) (int, error) {
 	geoname_url := fmt.Sprintf("http://api.geonames.org/searchJSON?q=%s&maxRows=1&username=example", city)
 	resp, err := http.Get(geoname_url)
-	if err != nil {
+	if err != nil || resp.StatusCode != 200 {
 		return 0, err
 	}
 	defer resp.Body.Close()
@@ -167,14 +169,14 @@ func getOSCommand() []string {
 
 func defaultConfig() Config {
 	config := make(Config)
-	lockScreener := getOSCommand()
+	screenLocker := getOSCommand()
 
 	config["Fajr"] = PrayerConfig{
 		Message: "Fajr Atha'an",
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Fajr Iqa'ama",
-			Command:  lockScreener,
+			Command:  screenLocker,
 		},
 	}
 
@@ -196,7 +198,7 @@ func defaultConfig() Config {
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Zuhr Iqa'ama",
-			Command:  lockScreener,
+			Command:  screenLocker,
 		},
 	}
 
@@ -205,7 +207,7 @@ func defaultConfig() Config {
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Asr Iqa'ama",
-			Command:  lockScreener,
+			Command:  screenLocker,
 		},
 	}
 
@@ -218,7 +220,7 @@ func defaultConfig() Config {
 		After: ReminderConfig{
 			Reminder: 5,
 			Message:  "Maghrib Iqa'ama",
-			Command:  lockScreener,
+			Command:  screenLocker,
 		},
 	}
 
@@ -227,7 +229,7 @@ func defaultConfig() Config {
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Isha Iqa'ama",
-			Command:  lockScreener,
+			Command:  screenLocker,
 		},
 	}
 
@@ -253,11 +255,17 @@ func main() {
 			return
 		}
 
-		// Get city ID using geonames.org api
-		cityId, err := getCityID(cityName)
-		if err != nil {
-			fmt.Printf("Error getting city id: %v\n", err)
-			return
+		// Use saved city ID if city didn't change
+		var cityId int
+		if cityName == prayer_times.CityName {
+			cityId = prayer_times.CityID
+		} else {
+			// Get city ID using geonames.org api
+			cityId, err = getCityID(cityName)
+			if err != nil {
+				fmt.Printf("Error getting city id: %v\n", err)
+				return
+			}
 		}
 
 		// Get prayer times using muslimpro.com
@@ -267,6 +275,9 @@ func main() {
 			return
 		}
 
+		// Save City id and name for later use
+		prayer_times.CityName = cityName
+		prayer_times.CityID = cityId
 		// Save prayer times in a json file
 		err = saveJSON(times_filename, prayer_times)
 		if err != nil {
@@ -275,6 +286,7 @@ func main() {
 		}
 	}
 
+	// Read config or create it if it doesn't exist
 	config, err := readJSON[Config](config_filename)
 	if err != nil {
 		// Create default config
