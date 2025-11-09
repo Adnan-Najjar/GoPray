@@ -1,89 +1,101 @@
 {
-    "Fajr": {
-        "Delay": 0,
-        "Command": [],
-        "Before": {
-            "Reminder": 0,
-            "Command": []
-        },
-        "After": {
-            "Reminder": 15,
-            "Command": [
-                "loginctl",
-                "lock-session"
-            ]
-        }
+  "Fajr": {
+    "Message": "Fajr Atha'an",
+    "Command": null,
+    "Before": {
+      "Message": "",
+      "Reminder": 0,
+      "Command": null
     },
-    "Sunrise": {
-        "Delay": 0,
-        "Command": [],
-        "Before": {
-            "Reminder": 0,
-            "Command": []
-        },
-        "After": {
-            "Reminder": 0,
-            "Command": []
-        }
-    },
-    "Zuhr": {
-        "Delay": 0,
-        "Command": [],
-        "Before": {
-            "Reminder": 0,
-            "Command": []
-        },
-        "After": {
-            "Reminder": 15,
-            "Command": [
-                "loginctl",
-                "lock-session"
-            ]
-        }
-    },
-    "Asr": {
-        "Delay": 0,
-        "Command": [],
-        "Before": {
-            "Reminder": 0,
-            "Command": []
-        },
-        "After": {
-            "Reminder": 15,
-            "Command": [
-                "loginctl",
-                "lock-session"
-            ]
-        }
-    },
-    "Maghrib": {
-        "Delay": 0,
-        "Command": [],
-        "Before": {
-            "Reminder": 0,
-            "Command": []
-        },
-        "After": {
-            "Reminder": 0,
-            "Command": [
-                "loginctl",
-                "lock-session"
-            ]
-        }
-    },
-    "Isha": {
-        "Delay": 0,
-        "Command": [],
-        "Before": {
-            "Reminder": 0,
-            "Command": []
-        },
-        "After": {
-            "Reminder": 15,
-            "Command": [
-                "loginctl",
-                "lock-session"
-            ]
-        }
+    "After": {
+      "Message": "Fajr Iqa'ama",
+      "Reminder": 15,
+      "Command": [
+        "loginctl",
+        "lock-session"
+      ]
     }
+  },
+  "Sunrise": {
+    "Message": "Sun has risen",
+    "Command": null,
+    "Before": {
+      "Message": "",
+      "Reminder": 0,
+      "Command": null
+    },
+    "After": {
+      "Message": "Duhaa time started",
+      "Reminder": 20,
+      "Command": null
+    }
+  },
+  "Zuhr": {
+    "Message": "Zuhr Atha'an",
+    "Command": null,
+    "Before": {
+      "Message": "Duhaa prayer",
+      "Reminder": 90,
+      "Command": null
+    },
+    "After": {
+      "Message": "Zuhr Iqa'ama",
+      "Reminder": 15,
+      "Command": [
+        "loginctl",
+        "lock-session"
+      ]
+    }
+  },
+  "Asr": {
+    "Message": "Asr Atha'an",
+    "Command": null,
+    "Before": {
+      "Message": "",
+      "Reminder": 0,
+      "Command": null
+    },
+    "After": {
+      "Message": "Asr Iqa'ama",
+      "Reminder": 15,
+      "Command": [
+        "loginctl",
+        "lock-session"
+      ]
+    }
+  },
+  "Maghrib": {
+    "Message": "Maghrib Atha'an",
+    "Command": null,
+    "Before": {
+      "Message": "Maghrib Atha'an after 5 minutes",
+      "Reminder": 5,
+      "Command": null
+    },
+    "After": {
+      "Message": "Maghrib Iqa'ama",
+      "Reminder": 5,
+      "Command": [
+        "loginctl",
+        "lock-session"
+      ]
+    }
+  },
+  "Isha": {
+    "Message": "Isha Atha'an",
+    "Command": null,
+    "Before": {
+      "Message": "",
+      "Reminder": 0,
+      "Command": null
+    },
+    "After": {
+      "Message": "Isha Iqa'ama",
+      "Reminder": 15,
+      "Command": [
+        "loginctl",
+        "lock-session"
+      ]
+    }
+  }
 }

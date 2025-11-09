@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -23,6 +24,21 @@ type PrayerTimes struct {
 	Maghrib    string `json:"Maghrib"`
 	Isha       string `json:"Isha"`
 }
+
+type ReminderConfig struct {
+	Message  string   `json:"Message"`
+	Reminder int      `json:"Reminder"`
+	Command  []string `json:"Command"`
+}
+
+type PrayerConfig struct {
+	Message string         `json:"Message"`
+	Command []string       `json:"Command"`
+	Before  ReminderConfig `json:"Before"`
+	After   ReminderConfig `json:"After"`
+}
+
+type Config map[string]PrayerConfig
 
 func getCityName() (string, error) {
 	resp, err := http.Get("https://ipapi.co/city/")
@@ -136,10 +152,93 @@ func readJSON[T any](filename string) (T, error) {
 	return data, nil
 }
 
+func getOSCommand() []string {
+	switch runtime.GOOS {
+	case "windows":
+		return []string{"rundll32.exe", "user32.dll,LockWorkStation"}
+	case "linux":
+		return []string{"loginctl", "lock-session"}
+	case "darwin":
+		return []string{"osascript", "-e", `tell application "System Events" to keystroke "q" using {control down, command down}`}
+	default:
+		return []string{}
+	}
+}
+
+func defaultConfig() Config {
+	config := make(Config)
+	lockScreener := getOSCommand()
+
+	config["Fajr"] = PrayerConfig{
+		Message: "Fajr Atha'an",
+		After: ReminderConfig{
+			Reminder: 15,
+			Message:  "Fajr Iqa'ama",
+			Command:  lockScreener,
+		},
+	}
+
+	config["Sunrise"] = PrayerConfig{
+		Message: "Sun has risen",
+		After: ReminderConfig{
+			Reminder: 20,
+			Message:  "Duhaa time started",
+		},
+	}
+
+	// 1-2 hour before Zuhr is the best time for Duhaa prayer
+	config["Zuhr"] = PrayerConfig{
+		Before: ReminderConfig{
+			Reminder: 90,
+			Message:  "Duhaa prayer",
+		},
+		Message: "Zuhr Atha'an",
+		After: ReminderConfig{
+			Reminder: 15,
+			Message:  "Zuhr Iqa'ama",
+			Command:  lockScreener,
+		},
+	}
+
+	config["Asr"] = PrayerConfig{
+		Message: "Asr Atha'an",
+		After: ReminderConfig{
+			Reminder: 15,
+			Message:  "Asr Iqa'ama",
+			Command:  lockScreener,
+		},
+	}
+
+	config["Maghrib"] = PrayerConfig{
+		Before: ReminderConfig{
+			Reminder: 5,
+			Message:  "Maghrib Atha'an after 5 minutes",
+		},
+		Message: "Maghrib Atha'an",
+		After: ReminderConfig{
+			Reminder: 5,
+			Message:  "Maghrib Iqa'ama",
+			Command:  lockScreener,
+		},
+	}
+
+	config["Isha"] = PrayerConfig{
+		Message: "Isha Atha'an",
+		After: ReminderConfig{
+			Reminder: 15,
+			Message:  "Isha Iqa'ama",
+			Command:  lockScreener,
+		},
+	}
+
+	return config
+}
+
 func main() {
 	var prayer_times PrayerTimes
 	var err error
 	times_filename := "prayer_times.json"
+	config_filename := "config.json"
 
 	// Read saved prayer times json file
 	prayer_times, err = readJSON[PrayerTimes](times_filename)
@@ -172,6 +271,19 @@ func main() {
 		err = saveJSON(times_filename, prayer_times)
 		if err != nil {
 			fmt.Printf("Error saving prayer times to %s: %v\n", times_filename, err)
+			return
+		}
+	}
+
+	config, err := readJSON[Config](config_filename)
+	if err != nil {
+		// Create default config
+		config = defaultConfig()
+
+		// Save config in a json file
+		err = saveJSON(config_filename, config)
+		if err != nil {
+			fmt.Printf("Error saving config to %s: %v\n", config_filename, err)
 			return
 		}
 	}
