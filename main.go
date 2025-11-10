@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -15,16 +16,15 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-type PrayerTimes struct {
+type Metadata struct {
 	LastUpdate string `json:"LastUpdate"`
 	CityName   string `json:"CityName"`
 	CityID     int    `json:"CityID"`
-	Fajr       string `json:"Fajr"`
-	Sunrise    string `json:"Sunrise"`
-	Zuhr       string `json:"Zuhr"`
-	Asr        string `json:"Asr"`
-	Maghrib    string `json:"Maghrib"`
-	Isha       string `json:"Isha"`
+}
+
+type PrayerTimes struct {
+	Metadata
+	Times map[string]string `json:"Times"`
 }
 
 type ReminderConfig struct {
@@ -100,26 +100,14 @@ func getPrayerTimes(cityId int) (PrayerTimes, error) {
 	re := regexp.MustCompile(`<td>(.*)</td>`)
 	matches := re.FindAllStringSubmatch(jsContent, -1)
 
-	var p PrayerTimes
+	var prayer_times PrayerTimes
+	prayer_times.Times = make(map[string]string)
 	for i := range matches {
-		times := strings.Split(matches[i][1], "</td><td>")
-		switch times[0] {
-		case "Fajr":
-			p.Fajr = times[1]
-		case "Sunrise":
-			p.Sunrise = times[1]
-		case "Zuhr":
-			p.Zuhr = times[1]
-		case "Asr":
-			p.Asr = times[1]
-		case "Maghrib":
-			p.Maghrib = times[1]
-		case "Isha":
-			p.Isha = times[1]
-		}
+		athaans := strings.Split(matches[i][1], "</td><td>")
+		prayer_times.Times[athaans[0]] = athaans[1]
 	}
-	p.LastUpdate = time.Now().Format("2006-01-02")
-	return p, nil
+	prayer_times.LastUpdate = time.Now().Format("2006-01-02")
+	return prayer_times, nil
 }
 
 func saveJSON(filename string, data any) error {
@@ -236,8 +224,59 @@ func defaultConfig() Config {
 	return config
 }
 
+func athaanCaller(reminder time.Duration, prayer_name string, config Config) {
+	prayer_config := config[prayer_name]
+
+	// TODO: Implement Actions before prayer time
+
+	// Actions at prayer time
+	time.Sleep(reminder)
+	fmt.Println(prayer_config.Message)
+	// Run a command at prayer time
+	command := prayer_config.Command
+	if len(command) != 0 {
+		err := exec.Command(command[0], command[1:]...).Run()
+		if err != nil {
+			return
+		}
+	}
+
+	// Actions after prayer time
+	after_reminder := time.Duration(prayer_config.After.Reminder) * time.Minute
+	time.Sleep(after_reminder)
+	fmt.Println(prayer_config.After.Message)
+	// Run a command after the reminder
+	after_command := prayer_config.After.Command
+	if len(after_command) != 0 {
+		err := exec.Command(after_command[0], after_command[1:]...).Run()
+		if err != nil {
+			return
+		}
+	}
+}
+
+func tester(prayer_times PrayerTimes, config Config) {
+	for p := range prayer_times.Times {
+		now := time.Now()
+		// Parse athaan times
+		athaan_time, err := time.Parse("3:04 PM", prayer_times.Times[p])
+		if err != nil {
+			return
+		}
+		// Use current date with parsed athaan time
+		athaan_time_date := time.Date(now.Year(), now.Month(), now.Day(), athaan_time.Hour(), athaan_time.Minute(), 0, 0, now.Location())
+
+		if now.Before(athaan_time_date) {
+			duration := athaan_time_date.Sub(now)
+			fmt.Printf("Waiting for %s Atha'an after %v\n", p, duration)
+			athaanCaller(duration, p, config)
+		}
+	}
+}
+
 func main() {
 	var prayer_times PrayerTimes
+	var config Config
 	var err error
 	times_filename := "prayer_times.json"
 	config_filename := "config.json"
@@ -287,7 +326,7 @@ func main() {
 	}
 
 	// Read config or create it if it doesn't exist
-	config, err := readJSON[Config](config_filename)
+	config, err = readJSON[Config](config_filename)
 	if err != nil {
 		// Create default config
 		config = defaultConfig()
@@ -299,4 +338,6 @@ func main() {
 			return
 		}
 	}
+
+	tester(prayer_times, config)
 }
