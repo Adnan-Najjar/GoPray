@@ -19,6 +19,8 @@ import (
 	"github.com/gen2brain/beeep"
 )
 
+var Next string
+
 type Metadata struct {
 	LastUpdate string `json:"LastUpdate"`
 	CityName   string `json:"CityName"`
@@ -239,26 +241,29 @@ func defaultConfig() Config {
 }
 
 func athaanCaller(prayer PrayerDuration, config Config) {
+	var message string
 	prayer_config := config[prayer.Name]
 
 	// Actions before prayer time
 	before_reminder := prayer.Duration - time.Duration(prayer_config.Before.Reminder)*time.Minute
-	time.Sleep(before_reminder)
-	fmt.Println(prayer_config.Message)
-	beeep.Notify("Prayer Reminder", prayer_config.Message, "")
-	// Run a command before prayer time
-	before_command := prayer_config.Before.Command
-	if len(before_command) != 0 {
-		err := exec.Command(before_command[0], before_command[1:]...).Run()
-		if err != nil {
-			return
+	if before_reminder > 0 {
+		time.Sleep(before_reminder)
+		message = fmt.Sprintf("%d mins until %s Atha'an", prayer_config.Before.Reminder, prayer.Name)
+		beeep.Notify(prayer_config.Before.Message, message, "")
+		// Run a command before prayer time
+		before_command := prayer_config.Before.Command
+		if len(before_command) != 0 {
+			err := exec.Command(before_command[0], before_command[1:]...).Run()
+			if err != nil {
+				return
+			}
 		}
 	}
 
 	// Actions at prayer time
 	time.Sleep(prayer.Duration)
-	fmt.Println(prayer_config.Message)
-	beeep.Notify("Prayer Reminder", prayer_config.Message, "")
+	message = fmt.Sprintf("%s Atha'an", prayer.Name)
+	beeep.Notify(prayer_config.Message, message, "")
 	// Run a command at prayer time
 	command := prayer_config.Command
 	if len(command) != 0 {
@@ -270,15 +275,17 @@ func athaanCaller(prayer PrayerDuration, config Config) {
 
 	// Actions after prayer time
 	after_reminder := time.Duration(prayer_config.After.Reminder) * time.Minute
-	time.Sleep(after_reminder)
-	fmt.Println(prayer_config.After.Message)
-	beeep.Notify("Prayer Reminder", prayer_config.After.Message, "")
-	// Run a command after the reminder
-	after_command := prayer_config.After.Command
-	if len(after_command) != 0 {
-		err := exec.Command(after_command[0], after_command[1:]...).Run()
-		if err != nil {
-			return
+	if after_reminder > 0 {
+		time.Sleep(after_reminder)
+		message = fmt.Sprintf("Its been %d mins rom %s Atha'an", prayer_config.After.Reminder, prayer.Name)
+		beeep.Notify(prayer_config.After.Message, message, "")
+		// Run a command after the reminder
+		after_command := prayer_config.After.Command
+		if len(after_command) != 0 {
+			err := exec.Command(after_command[0], after_command[1:]...).Run()
+			if err != nil {
+				return
+			}
 		}
 	}
 }
@@ -383,21 +390,29 @@ func runMain() {
 	}
 
 	fmt.Printf("Times: %v\nDurations: %v\n", prayer_times, prayer_durations)
+	for _, p := range prayer_durations {
+		go athaanCaller(p, config)
+	}
 }
 
 func onReady() {
+	systray.SetIcon(getIcon())
 	systray.SetTitle("GoPray")
 	systray.SetTooltip("Prayer Times App")
 
-	// Add menu items for each prayer
+	// Add City name and Date
 	text := fmt.Sprintf("%s\t\t\t%s", prayer_times.CityName, prayer_times.LastUpdate)
 	systray.AddMenuItem(text, "").Disable()
 	systray.AddSeparator()
+
+	// Add each prayer time
 	for _, prayer := range prayer_times.Times {
 		format := fmt.Sprintf("%%-%ds\t %%s", 25-len(prayer.Name))
 		systray.AddMenuItem(fmt.Sprintf(format, prayer.Name, prayer.Time), "")
 	}
 	systray.AddSeparator()
+
+	// Add Quit button
 	quit := systray.AddMenuItem("Quit", "Quit the app")
 	quit.Click(func() {
 		systray.Quit()
@@ -406,6 +421,26 @@ func onReady() {
 
 func onExit() {
 	// cleanup
+}
+
+func getIcon() []byte {
+	iconWin, err := os.ReadFile("assets/icon.ico")
+	if err != nil {
+		fmt.Printf("Icon failed: %v:", err)
+		return nil
+	}
+
+	icon, err := os.ReadFile("assets/icon.png")
+	if err != nil {
+		fmt.Printf("Icon failed: %v:", err)
+		return nil
+	}
+
+	if runtime.GOOS == "windows" {
+		return iconWin
+	} else {
+		return icon
+	}
 }
 
 func main() {
