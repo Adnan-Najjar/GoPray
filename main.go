@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,15 +23,20 @@ type Metadata struct {
 	CityID     int    `json:"CityID"`
 }
 
+type Prayer struct {
+	Name string `json:"name"`
+	Time string `json:"time"`
+}
+
 type PrayerTimes struct {
 	Metadata
-	Times map[string]string `json:"Times"`
+	Times []Prayer `json:"Times"`
 }
 
 type ReminderConfig struct {
-	Message  string   `json:"Message"`
-	Reminder int      `json:"Reminder"`
-	Command  []string `json:"Command"`
+	Message  string        `json:"Message"`
+	Reminder int `json:"Reminder"`
+	Command  []string      `json:"Command"`
 }
 
 type PrayerConfig struct {
@@ -41,6 +47,11 @@ type PrayerConfig struct {
 }
 
 type Config map[string]PrayerConfig
+
+type PrayerDuration struct {
+	Name     string
+	Duration time.Duration
+}
 
 func getCityName() (string, error) {
 	resp, err := http.Get("http://ip-api.com/line?fields=city")
@@ -101,11 +112,12 @@ func getPrayerTimes(cityId int) (PrayerTimes, error) {
 	matches := re.FindAllStringSubmatch(jsContent, -1)
 
 	var prayer_times PrayerTimes
-	prayer_times.Times = make(map[string]string)
+	prayers := []Prayer{}
 	for i := range matches {
-		athaans := strings.Split(matches[i][1], "</td><td>")
-		prayer_times.Times[athaans[0]] = athaans[1]
+		name_time := strings.Split(matches[i][1], "</td><td>")
+		prayers = append(prayers, Prayer{Name: name_time[0], Time: name_time[1]})
 	}
+	prayer_times.Times = prayers
 	prayer_times.LastUpdate = time.Now().Format("2006-01-02")
 	return prayer_times, nil
 }
@@ -224,13 +236,13 @@ func defaultConfig() Config {
 	return config
 }
 
-func athaanCaller(reminder time.Duration, prayer_name string, config Config) {
-	prayer_config := config[prayer_name]
+func athaanCaller(prayer PrayerDuration, config Config) {
+	prayer_config := config[prayer.Name]
 
 	// TODO: Implement Actions before prayer time
 
 	// Actions at prayer time
-	time.Sleep(reminder)
+	time.Sleep(prayer.Duration)
 	fmt.Println(prayer_config.Message)
 	// Run a command at prayer time
 	command := prayer_config.Command
@@ -255,27 +267,34 @@ func athaanCaller(reminder time.Duration, prayer_name string, config Config) {
 	}
 }
 
-func tester(prayer_times PrayerTimes, config Config) {
-	for p := range prayer_times.Times {
+func getPrayerDurations(prayer_times PrayerTimes) ([]PrayerDuration, error) {
+	var prayer_durations []PrayerDuration
+	for _, prayer := range prayer_times.Times {
 		now := time.Now()
-		// Parse athaan times
-		athaan_time, err := time.Parse("3:04 PM", prayer_times.Times[p])
+		// Parse prayer times
+		prayer_time, err := time.Parse("3:04 PM", prayer.Time)
 		if err != nil {
-			return
+			return nil, err
 		}
-		// Use current date with parsed athaan time
-		athaan_time_date := time.Date(now.Year(), now.Month(), now.Day(), athaan_time.Hour(), athaan_time.Minute(), 0, 0, now.Location())
+		// Use current date with parsed prayer time
+		prayer_time_date := time.Date(now.Year(), now.Month(), now.Day(), prayer_time.Hour(), prayer_time.Minute(), 0, 0, now.Location())
 
-		if now.Before(athaan_time_date) {
-			duration := athaan_time_date.Sub(now)
-			fmt.Printf("Waiting for %s Atha'an after %v\n", p, duration)
-			athaanCaller(duration, p, config)
+		if now.Before(prayer_time_date) {
+			duration := prayer_time_date.Sub(now)
+			prayer_durations = append(prayer_durations, PrayerDuration{Name: prayer.Name, Duration: duration})
 		}
 	}
+
+	sort.Slice(prayer_durations, func(i, j int) bool {
+		return prayer_durations[i].Duration < prayer_durations[j].Duration
+	})
+
+	return prayer_durations, nil
 }
 
 func main() {
 	var prayer_times PrayerTimes
+	var prayer_durations []PrayerDuration
 	var config Config
 	var err error
 	times_filename := "prayer_times.json"
@@ -339,5 +358,12 @@ func main() {
 		}
 	}
 
-	tester(prayer_times, config)
+	// Calculate durations (time until prayer) and sort them
+	prayer_durations, err = getPrayerDurations(prayer_times)
+	if err != nil {
+		fmt.Printf("Error getting durations: %v", err)
+		return
+	}
+
+	fmt.Printf("prayer_durations: %v\n", prayer_durations)
 }
