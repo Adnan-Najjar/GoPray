@@ -34,9 +34,9 @@ type PrayerTimes struct {
 }
 
 type ReminderConfig struct {
-	Message  string        `json:"Message"`
-	Reminder int `json:"Reminder"`
-	Command  []string      `json:"Command"`
+	Message  string   `json:"Message"`
+	Reminder int      `json:"Reminder"`
+	Command  []string `json:"Command"`
 }
 
 type PrayerConfig struct {
@@ -239,7 +239,18 @@ func defaultConfig() Config {
 func athaanCaller(prayer PrayerDuration, config Config) {
 	prayer_config := config[prayer.Name]
 
-	// TODO: Implement Actions before prayer time
+	// Actions before prayer time
+	before_reminder := prayer.Duration - time.Duration(prayer_config.Before.Reminder)*time.Minute
+	time.Sleep(before_reminder)
+	fmt.Println(prayer_config.Message)
+	// Run a command before prayer time
+	before_command := prayer_config.Before.Command
+	if len(before_command) != 0 {
+		err := exec.Command(before_command[0], before_command[1:]...).Run()
+		if err != nil {
+			return
+		}
+	}
 
 	// Actions at prayer time
 	time.Sleep(prayer.Duration)
@@ -365,5 +376,7 @@ func main() {
 		return
 	}
 
-	fmt.Printf("prayer_durations: %v\n", prayer_durations)
+	for _, duration := range prayer_durations {
+		athaanCaller(duration, config)
+	}
 }
