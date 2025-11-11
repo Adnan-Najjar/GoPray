@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/energye/systray"
+	"github.com/gen2brain/beeep"
 )
 
 type Metadata struct {
@@ -118,7 +120,7 @@ func getPrayerTimes(cityId int) (PrayerTimes, error) {
 		prayers = append(prayers, Prayer{Name: name_time[0], Time: name_time[1]})
 	}
 	prayer_times.Times = prayers
-	prayer_times.LastUpdate = time.Now().Format("2006-01-02")
+	prayer_times.LastUpdate = time.Now().Format("02-01-2006")
 	return prayer_times, nil
 }
 
@@ -243,6 +245,7 @@ func athaanCaller(prayer PrayerDuration, config Config) {
 	before_reminder := prayer.Duration - time.Duration(prayer_config.Before.Reminder)*time.Minute
 	time.Sleep(before_reminder)
 	fmt.Println(prayer_config.Message)
+	beeep.Notify("Prayer Reminder", prayer_config.Message, "")
 	// Run a command before prayer time
 	before_command := prayer_config.Before.Command
 	if len(before_command) != 0 {
@@ -255,6 +258,7 @@ func athaanCaller(prayer PrayerDuration, config Config) {
 	// Actions at prayer time
 	time.Sleep(prayer.Duration)
 	fmt.Println(prayer_config.Message)
+	beeep.Notify("Prayer Reminder", prayer_config.Message, "")
 	// Run a command at prayer time
 	command := prayer_config.Command
 	if len(command) != 0 {
@@ -268,6 +272,7 @@ func athaanCaller(prayer PrayerDuration, config Config) {
 	after_reminder := time.Duration(prayer_config.After.Reminder) * time.Minute
 	time.Sleep(after_reminder)
 	fmt.Println(prayer_config.After.Message)
+	beeep.Notify("Prayer Reminder", prayer_config.After.Message, "")
 	// Run a command after the reminder
 	after_command := prayer_config.After.Command
 	if len(after_command) != 0 {
@@ -303,10 +308,11 @@ func getPrayerDurations(prayer_times PrayerTimes) ([]PrayerDuration, error) {
 	return prayer_durations, nil
 }
 
-func main() {
-	var prayer_times PrayerTimes
-	var prayer_durations []PrayerDuration
-	var config Config
+var prayer_times PrayerTimes
+var prayer_durations []PrayerDuration
+var config Config
+
+func runMain() {
 	var err error
 	times_filename := "prayer_times.json"
 	config_filename := "config.json"
@@ -315,7 +321,7 @@ func main() {
 	prayer_times, err = readJSON[PrayerTimes](times_filename)
 	// If reading failed OR prayer times not up to date
 	// Then update it
-	if err != nil || prayer_times.LastUpdate != time.Now().Format("2006-01-02") {
+	if err != nil || prayer_times.LastUpdate != time.Now().Format("02-01-2006") {
 
 		// Get city name using ipapi.co
 		cityName, err := getCityName()
@@ -376,7 +382,33 @@ func main() {
 		return
 	}
 
-	for _, duration := range prayer_durations {
-		athaanCaller(duration, config)
+	fmt.Printf("Times: %v\nDurations: %v\n", prayer_times, prayer_durations)
+}
+
+func onReady() {
+	systray.SetTitle("GoPray")
+	systray.SetTooltip("Prayer Times App")
+
+	// Add menu items for each prayer
+	text := fmt.Sprintf("%s\t\t\t%s", prayer_times.CityName, prayer_times.LastUpdate)
+	systray.AddMenuItem(text, "").Disable()
+	systray.AddSeparator()
+	for _, prayer := range prayer_times.Times {
+		format := fmt.Sprintf("%%-%ds\t %%s", 25-len(prayer.Name))
+		systray.AddMenuItem(fmt.Sprintf(format, prayer.Name, prayer.Time), "")
 	}
+	systray.AddSeparator()
+	quit := systray.AddMenuItem("Quit", "Quit the app")
+	quit.Click(func() {
+		systray.Quit()
+	})
+}
+
+func onExit() {
+	// cleanup
+}
+
+func main() {
+	runMain()
+	systray.Run(onReady, onExit)
 }
