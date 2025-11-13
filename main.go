@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -22,6 +24,9 @@ import (
 	"github.com/gen2brain/beeep"
 	"github.com/hajimehoshi/go-mp3"
 )
+
+//go:embed assets/*
+var assetsFS embed.FS
 
 var Next string
 var ctx context.Context
@@ -361,8 +366,14 @@ var config Config
 
 func runMain() {
 	var err error
-	times_filename := "prayer_times.json"
-	config_filename := "config.json"
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		configDir = "."
+	}
+	configDir = filepath.Join(configDir, "gopray")
+	os.MkdirAll(configDir, 0755)
+	times_filename := filepath.Join(configDir, "prayer_times.json")
+	config_filename := filepath.Join(configDir, "config.json")
 
 	ctx, cancel = context.WithCancel(context.Background())
 
@@ -469,12 +480,12 @@ func onExit() {
 }
 
 func playMP3(filePath string) {
+	var file io.ReadCloser
+	var err error
 	if len(filePath) <= 0 {
-		filePath = "assets/athaan.mp3"
-	}
-	file, err := os.Open(filePath)
-	if err != nil {
-		return
+		file, err = assetsFS.Open(filePath)
+	} else {
+		file, err = os.Open(filePath)
 	}
 	defer file.Close()
 
@@ -503,13 +514,13 @@ func playMP3(filePath string) {
 }
 
 func getIcon() []byte {
-	iconWin, err := os.ReadFile("assets/icon.ico")
+	iconWin, err := assetsFS.ReadFile("assets/icon.ico")
 	if err != nil {
 		fmt.Printf("Icon failed: %v:", err)
 		return nil
 	}
 
-	icon, err := os.ReadFile("assets/icon.png")
+	icon, err := assetsFS.ReadFile("assets/icon.png")
 	if err != nil {
 		fmt.Printf("Icon failed: %v:", err)
 		return nil
