@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/ebitengine/oto/v3"
 	"github.com/energye/systray"
 	"github.com/gen2brain/beeep"
+	"github.com/hajimehoshi/go-mp3"
 )
 
 var Next string
@@ -45,11 +47,13 @@ type ReminderConfig struct {
 	Message  string   `json:"Message"`
 	Reminder int      `json:"Reminder"`
 	Command  []string `json:"Command"`
+	Sound    string   `json:"Sound"`
 }
 
 type PrayerConfig struct {
 	Message string         `json:"Message"`
 	Command []string       `json:"Command"`
+	Sound   string         `json:"Sound"`
 	Before  ReminderConfig `json:"Before"`
 	After   ReminderConfig `json:"After"`
 }
@@ -181,17 +185,21 @@ func defaultConfig() Config {
 
 	config["Fajr"] = PrayerConfig{
 		Message: "Fajr Atha'an",
+		Sound:   "",
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Fajr Iqa'ama",
+			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
 
 	config["Sunrise"] = PrayerConfig{
 		Message: "Sun has risen",
+		Sound:   "",
 		After: ReminderConfig{
 			Reminder: 20,
+			Sound:    "",
 			Message:  "Duhaa time started",
 		},
 	}
@@ -201,20 +209,24 @@ func defaultConfig() Config {
 		Before: ReminderConfig{
 			Reminder: 90,
 			Message:  "Duhaa prayer",
+			Sound:    "",
 		},
 		Message: "Zuhr Atha'an",
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Zuhr Iqa'ama",
+			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
 
 	config["Asr"] = PrayerConfig{
 		Message: "Asr Atha'an",
+		Sound:   "",
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Asr Iqa'ama",
+			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
@@ -223,20 +235,24 @@ func defaultConfig() Config {
 		Before: ReminderConfig{
 			Reminder: 5,
 			Message:  "Maghrib Atha'an after 5 minutes",
+			Sound:    "",
 		},
 		Message: "Maghrib Atha'an",
 		After: ReminderConfig{
 			Reminder: 5,
 			Message:  "Maghrib Iqa'ama",
+			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
 
 	config["Isha"] = PrayerConfig{
 		Message: "Isha Atha'an",
+		Sound:   "",
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Isha Iqa'ama",
+			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
@@ -255,6 +271,8 @@ func athaanCaller(ctx context.Context, prayer PrayerDuration, config Config) {
 		case <-time.After(before_reminder):
 			message = fmt.Sprintf("%d mins until %s Atha'an", prayer_config.Before.Reminder, prayer.Name)
 			beeep.Notify(prayer_config.Before.Message, message, "")
+			// Play sound before prayer time
+			playMP3(prayer_config.Before.Sound)
 			// Run a command before prayer time
 			before_command := prayer_config.Before.Command
 			if len(before_command) != 0 {
@@ -274,6 +292,8 @@ func athaanCaller(ctx context.Context, prayer PrayerDuration, config Config) {
 		case <-time.After(prayer.Duration):
 			message = fmt.Sprintf("%s Atha'an", prayer.Name)
 			beeep.Notify(prayer_config.Message, message, "")
+			// Play sound at prayer time
+			playMP3(prayer_config.Sound)
 			// Run a command at prayer time
 			command := prayer_config.Command
 			if len(command) != 0 {
@@ -294,6 +314,8 @@ func athaanCaller(ctx context.Context, prayer PrayerDuration, config Config) {
 		case <-time.After(after_reminder):
 			message = fmt.Sprintf("Its been %d mins rom %s Atha'an", prayer_config.After.Reminder, prayer.Name)
 			beeep.Notify(prayer_config.After.Message, message, "")
+			// Play sound after the reminder
+			playMP3(prayer_config.After.Sound)
 			// Run a command after the reminder
 			after_command := prayer_config.After.Command
 			if len(after_command) != 0 {
@@ -446,6 +468,40 @@ func onExit() {
 	}
 }
 
+func playMP3(filePath string) {
+	if len(filePath) <= 0 {
+		filePath = "assets/athaan.mp3"
+	}
+	file, err := os.Open(filePath)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	decoder, err := mp3.NewDecoder(file)
+	if err != nil {
+		return
+	}
+
+	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
+		SampleRate:   decoder.SampleRate(),
+		ChannelCount: 2,
+		Format:       oto.FormatSignedInt16LE,
+	})
+	if err != nil {
+		return
+	}
+	<-ready
+
+	player := ctx.NewPlayer(decoder)
+
+	player.Play()
+
+	for player.IsPlaying() {
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func getIcon() []byte {
 	iconWin, err := os.ReadFile("assets/icon.ico")
 	if err != nil {
@@ -467,6 +523,7 @@ func getIcon() []byte {
 }
 
 func main() {
+	beeep.AppName = "GoPray"
 	runMain()
 
 	// Handle signals to quit gracefully
