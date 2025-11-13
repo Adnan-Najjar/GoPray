@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -20,6 +22,8 @@ import (
 )
 
 var Next string
+var ctx context.Context
+var cancel context.CancelFunc
 
 type Metadata struct {
 	LastUpdate string `json:"LastUpdate"`
@@ -240,35 +244,45 @@ func defaultConfig() Config {
 	return config
 }
 
-func athaanCaller(prayer PrayerDuration, config Config) {
+func athaanCaller(ctx context.Context, prayer PrayerDuration, config Config) {
 	var message string
 	prayer_config := config[prayer.Name]
 
 	// Actions before prayer time
 	before_reminder := prayer.Duration - time.Duration(prayer_config.Before.Reminder)*time.Minute
 	if before_reminder > 0 {
-		time.Sleep(before_reminder)
-		message = fmt.Sprintf("%d mins until %s Atha'an", prayer_config.Before.Reminder, prayer.Name)
-		beeep.Notify(prayer_config.Before.Message, message, "")
-		// Run a command before prayer time
-		before_command := prayer_config.Before.Command
-		if len(before_command) != 0 {
-			err := exec.Command(before_command[0], before_command[1:]...).Run()
-			if err != nil {
-				return
+		select {
+		case <-time.After(before_reminder):
+			message = fmt.Sprintf("%d mins until %s Atha'an", prayer_config.Before.Reminder, prayer.Name)
+			beeep.Notify(prayer_config.Before.Message, message, "")
+			// Run a command before prayer time
+			before_command := prayer_config.Before.Command
+			if len(before_command) != 0 {
+				err := exec.Command(before_command[0], before_command[1:]...).Run()
+				if err != nil {
+					return
+				}
 			}
+		case <-ctx.Done():
+			return
 		}
 	}
 
 	// Actions at prayer time
-	time.Sleep(prayer.Duration)
-	message = fmt.Sprintf("%s Atha'an", prayer.Name)
-	beeep.Notify(prayer_config.Message, message, "")
-	// Run a command at prayer time
-	command := prayer_config.Command
-	if len(command) != 0 {
-		err := exec.Command(command[0], command[1:]...).Run()
-		if err != nil {
+	if prayer.Duration >= 0 {
+		select {
+		case <-time.After(prayer.Duration):
+			message = fmt.Sprintf("%s Atha'an", prayer.Name)
+			beeep.Notify(prayer_config.Message, message, "")
+			// Run a command at prayer time
+			command := prayer_config.Command
+			if len(command) != 0 {
+				err := exec.Command(command[0], command[1:]...).Run()
+				if err != nil {
+					return
+				}
+			}
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -276,16 +290,20 @@ func athaanCaller(prayer PrayerDuration, config Config) {
 	// Actions after prayer time
 	after_reminder := time.Duration(prayer_config.After.Reminder) * time.Minute
 	if after_reminder > 0 {
-		time.Sleep(after_reminder)
-		message = fmt.Sprintf("Its been %d mins rom %s Atha'an", prayer_config.After.Reminder, prayer.Name)
-		beeep.Notify(prayer_config.After.Message, message, "")
-		// Run a command after the reminder
-		after_command := prayer_config.After.Command
-		if len(after_command) != 0 {
-			err := exec.Command(after_command[0], after_command[1:]...).Run()
-			if err != nil {
-				return
+		select {
+		case <-time.After(after_reminder):
+			message = fmt.Sprintf("Its been %d mins rom %s Atha'an", prayer_config.After.Reminder, prayer.Name)
+			beeep.Notify(prayer_config.After.Message, message, "")
+			// Run a command after the reminder
+			after_command := prayer_config.After.Command
+			if len(after_command) != 0 {
+				err := exec.Command(after_command[0], after_command[1:]...).Run()
+				if err != nil {
+					return
+				}
 			}
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -323,6 +341,8 @@ func runMain() {
 	var err error
 	times_filename := "prayer_times.json"
 	config_filename := "config.json"
+
+	ctx, cancel = context.WithCancel(context.Background())
 
 	// Read saved prayer times json file
 	prayer_times, err = readJSON[PrayerTimes](times_filename)
@@ -391,7 +411,7 @@ func runMain() {
 
 	fmt.Printf("Times: %v\nDurations: %v\n", prayer_times, prayer_durations)
 	for _, p := range prayer_durations {
-		go athaanCaller(p, config)
+		go athaanCaller(ctx, p, config)
 	}
 }
 
@@ -420,7 +440,10 @@ func onReady() {
 }
 
 func onExit() {
-	// cleanup
+	// kill children to avoid orphanage
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func getIcon() []byte {
@@ -445,5 +468,14 @@ func getIcon() []byte {
 
 func main() {
 	runMain()
+
+	// Handle signals to quit gracefully
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		systray.Quit()
+	}()
+
 	systray.Run(onReady, onExit)
 }
