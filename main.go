@@ -297,7 +297,7 @@ func muezzin(config ReminderConfig, name string, format string) {
 	}
 }
 
-func athaanScheduler(ctx context.Context, prayer PrayerDuration, config Config) {
+func athaanScheduler(ctx context.Context, prayer PrayerDuration) {
 	prayer_config := config[prayer.Name]
 
 	// Actions before prayer time
@@ -447,7 +447,7 @@ func runMain() {
 
 	fmt.Printf("Times: %v\nDurations: %v\n", prayer_times, prayer_durations)
 	for _, p := range prayer_durations {
-		go athaanScheduler(ctx, p, config)
+		go athaanScheduler(ctx, p)
 	}
 }
 
@@ -484,8 +484,45 @@ func onReady() {
 
 	// Add each prayer time
 	for _, prayer := range prayer_times.Times {
-		format := fmt.Sprintf("%%-%ds\t %%s", 25-len(prayer.Name))
-		systray.AddMenuItem(fmt.Sprintf(format, prayer.Name, prayer.Time), "")
+		format := fmt.Sprintf("%%-%ds\t %%s", 20-len(prayer.Name))
+		// Create summary of current config
+		var prayer_config string
+		reminder := config[prayer.Name].ReminderConfig
+		if reminder.Reminder > 0 {
+			prayer_config += fmt.Sprintf("%d mins\n", reminder.Reminder)
+		}
+		if reminder.Message != "" {
+			prayer_config += fmt.Sprintf("%s\n", reminder.Message)
+		}
+		if reminder.Command != nil {
+			prayer_config += fmt.Sprintf("%v\n", reminder.Command)
+		}
+
+		before := config[prayer.Name].Before
+		if before.Reminder > 0 {
+			prayer_config += "Before:\n"
+			prayer_config += fmt.Sprintf("\t%d mins\n", before.Reminder)
+		}
+		if before.Message != "" {
+			prayer_config += fmt.Sprintf("\t%s\n", before.Message)
+		}
+		if before.Command != nil {
+			prayer_config += fmt.Sprintf("\t%v\n", before.Command)
+		}
+
+		after := config[prayer.Name].After
+		if after.Reminder > 0 {
+			prayer_config += "After:\n"
+			prayer_config += fmt.Sprintf("\t%d mins\n", after.Reminder)
+		}
+		if after.Message != "" {
+			prayer_config += fmt.Sprintf("\t%s\n", after.Message)
+		}
+		if after.Command != nil {
+			prayer_config += fmt.Sprintf("\t%v\n", after.Command)
+		}
+
+		systray.AddMenuItem(fmt.Sprintf(format, prayer.Name, prayer.Time), "").AddSubMenuItem(prayer_config, "")
 	}
 	systray.AddSeparator()
 
