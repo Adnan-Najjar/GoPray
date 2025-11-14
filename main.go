@@ -68,6 +68,8 @@ type PrayerDuration struct {
 	Duration time.Duration
 }
 
+var next_prayer PrayerDuration
+
 func getCityName() (string, error) {
 	resp, err := http.Get("http://ip-api.com/line?fields=city")
 	if err != nil || resp.StatusCode != 200 {
@@ -281,7 +283,7 @@ func muezzin(config ReminderConfig, name string, format string) {
 	if config.Reminder != 0 {
 		opts = []any{config.Reminder, name}
 	}
-	message := fmt.Sprintf(format, opts ...)
+	message := fmt.Sprintf(format, opts...)
 	beeep.Notify(config.Message, message, "")
 	// Play sound
 	playMP3(config.Sound)
@@ -314,6 +316,7 @@ func athaanScheduler(ctx context.Context, prayer PrayerDuration, config Config) 
 		select {
 		case <-time.After(prayer.Duration):
 			muezzin(prayer_config.ReminderConfig, prayer.Name, "%s Atha'an is now")
+			next_prayer = prayer
 		case <-ctx.Done():
 			return
 		}
@@ -352,6 +355,7 @@ func getPrayerDurations(prayer_times PrayerTimes) ([]PrayerDuration, error) {
 	sort.Slice(prayer_durations, func(i, j int) bool {
 		return prayer_durations[i].Duration < prayer_durations[j].Duration
 	})
+	next_prayer = prayer_durations[0]
 
 	return prayer_durations, nil
 }
@@ -448,10 +452,31 @@ func onReady() {
 	systray.SetIcon(getIcon())
 	systray.SetTitle("GoPray")
 	systray.SetTooltip("Prayer Times App")
+	// Open on left click
+	systray.SetOnClick(func(menu systray.IMenu) {
+		menu.ShowMenu()
+	})
 
 	// Add City name and Date
 	text := fmt.Sprintf("%s\t\t\t%s", prayer_times.CityName, prayer_times.LastUpdate)
 	systray.AddMenuItem(text, "").Disable()
+	systray.AddSeparator()
+
+	// Show time until next prayer
+	next_prayer_menu := systray.AddMenuItem("", "")
+	go func() {
+		for {
+			var until string
+			if next_prayer.Duration.Minutes() < 1 {
+				until = strings.Split(next_prayer.Duration.String(), ".")[0] + "s"
+			} else {
+				until = strings.Split(next_prayer.Duration.String(), "m")[0] + "m"
+			}
+			message := fmt.Sprintf("%s until %s", until, next_prayer.Name)
+			next_prayer_menu.SetTitle(message)
+			time.Sleep(time.Minute)
+		}
+	}()
 	systray.AddSeparator()
 
 	// Add each prayer time

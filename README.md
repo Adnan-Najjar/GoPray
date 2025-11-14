@@ -54,7 +54,7 @@ You must restart to apply changes.
 
 ## TODO
 
-- [ ] Add an indicator that shows time until next prayer
+- [x] Add an indicator that shows time until next prayer
 - [ ] Implement logging for debugging
 - [ ] Add unit tests and improve error handling
 - [ ] Add more sound options and volume control
