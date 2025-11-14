@@ -4,7 +4,7 @@ Lightweight prayer times program that can be customized with reminders, sounds a
 
 ## Features
 
-- Automatic location detection and prayer time fetching using [muslimpro](muslimpro.com)
+- Automatic location detection and prayer time fetching using [muslimpro](https://muslimpro.com)
 - System tray interface showing prayer times
 - Notifications for prayer times and reminders
 - Plays athaan sound (included)

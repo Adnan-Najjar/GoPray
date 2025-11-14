@@ -355,7 +355,9 @@ func getPrayerDurations(prayer_times PrayerTimes) ([]PrayerDuration, error) {
 	sort.Slice(prayer_durations, func(i, j int) bool {
 		return prayer_durations[i].Duration < prayer_durations[j].Duration
 	})
-	next_prayer = prayer_durations[0]
+	if len(prayer_durations) > 0 {
+		next_prayer = prayer_durations[0]
+	}
 
 	return prayer_durations, nil
 }
@@ -465,22 +467,26 @@ func onReady() {
 	systray.AddMenuItem(text, "").Disable()
 	systray.AddSeparator()
 
-	// Show time until next prayer
-	next_prayer_menu := systray.AddMenuItem("", "")
-	go func() {
-		for {
-			var until string
-			if next_prayer.Duration.Minutes() < 1 {
-				until = strings.Split(next_prayer.Duration.String(), ".")[0] + "s"
-			} else {
-				until = strings.Split(next_prayer.Duration.String(), "m")[0] + "m"
+	// Check if next prayer exist
+	if next_prayer != (PrayerDuration{}) {
+		// Show time until next prayer
+		next_prayer_menu := systray.AddMenuItem("", "")
+		go func() {
+			for {
+				var until string
+				if next_prayer.Duration.Minutes() < 1 {
+					until = strings.Split(next_prayer.Duration.String(), ".")[0] + "s"
+				} else {
+					until = strings.Split(next_prayer.Duration.String(), "m")[0] + "m"
+				}
+				message := fmt.Sprintf("%s until %s", until, next_prayer.Name)
+				next_prayer_menu.SetTitle(message)
+				time.Sleep(time.Minute)
+				next_prayer.Duration = next_prayer.Duration - time.Minute
 			}
-			message := fmt.Sprintf("%s until %s", until, next_prayer.Name)
-			next_prayer_menu.SetTitle(message)
-			time.Sleep(time.Minute)
-		}
-	}()
-	systray.AddSeparator()
+		}()
+		systray.AddSeparator()
+	}
 
 	// Add each prayer time
 	for _, prayer := range prayer_times.Times {
