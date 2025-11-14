@@ -56,11 +56,9 @@ type ReminderConfig struct {
 }
 
 type PrayerConfig struct {
-	Message string         `json:"Message"`
-	Command []string       `json:"Command"`
-	Sound   string         `json:"Sound"`
-	Before  ReminderConfig `json:"Before"`
-	After   ReminderConfig `json:"After"`
+	ReminderConfig
+	Before ReminderConfig `json:"Before"`
+	After  ReminderConfig `json:"After"`
 }
 
 type Config map[string]PrayerConfig
@@ -189,8 +187,10 @@ func defaultConfig() Config {
 	screenLocker := getOSCommand()
 
 	config["Fajr"] = PrayerConfig{
-		Message: "Fajr Atha'an",
-		Sound:   "",
+		ReminderConfig: ReminderConfig{
+			Message: "Fajr Atha'an",
+			Sound:   "",
+		},
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Fajr Iqa'ama",
@@ -200,8 +200,10 @@ func defaultConfig() Config {
 	}
 
 	config["Sunrise"] = PrayerConfig{
-		Message: "Sun has risen",
-		Sound:   "",
+		ReminderConfig: ReminderConfig{
+			Message: "Sun has risen",
+			Sound:   "",
+		},
 		After: ReminderConfig{
 			Reminder: 20,
 			Sound:    "",
@@ -216,7 +218,9 @@ func defaultConfig() Config {
 			Message:  "Duhaa prayer",
 			Sound:    "",
 		},
-		Message: "Zuhr Atha'an",
+		ReminderConfig: ReminderConfig{
+			Message: "Zuhr Atha'an",
+		},
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Zuhr Iqa'ama",
@@ -226,8 +230,10 @@ func defaultConfig() Config {
 	}
 
 	config["Asr"] = PrayerConfig{
-		Message: "Asr Atha'an",
-		Sound:   "",
+		ReminderConfig: ReminderConfig{
+			Message: "Asr Atha'an",
+			Sound:   "",
+		},
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Asr Iqa'ama",
@@ -242,7 +248,9 @@ func defaultConfig() Config {
 			Message:  "Maghrib Atha'an after 5 minutes",
 			Sound:    "",
 		},
-		Message: "Maghrib Atha'an",
+		ReminderConfig: ReminderConfig{
+			Message: "Maghrib Atha'an",
+		},
 		After: ReminderConfig{
 			Reminder: 5,
 			Message:  "Maghrib Iqa'ama",
@@ -252,8 +260,10 @@ func defaultConfig() Config {
 	}
 
 	config["Isha"] = PrayerConfig{
-		Message: "Isha Atha'an",
-		Sound:   "",
+		ReminderConfig: ReminderConfig{
+			Message: "Isha Atha'an",
+			Sound:   "",
+		},
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Isha Iqa'ama",
@@ -265,8 +275,27 @@ func defaultConfig() Config {
 	return config
 }
 
-func athaanCaller(ctx context.Context, prayer PrayerDuration, config Config) {
-	var message string
+// Sends a notification with sound and runs the command
+func muezzin(config ReminderConfig, name string, format string) {
+	opts := []any{name}
+	if config.Reminder != 0 {
+		opts = []any{config.Reminder, name}
+	}
+	message := fmt.Sprintf(format, opts ...)
+	beeep.Notify(config.Message, message, "")
+	// Play sound
+	playMP3(config.Sound)
+	// Run a command if exists
+	command := config.Command
+	if len(command) != 0 {
+		err := exec.Command(command[0], command[1:]...).Run()
+		if err != nil {
+			return
+		}
+	}
+}
+
+func athaanScheduler(ctx context.Context, prayer PrayerDuration, config Config) {
 	prayer_config := config[prayer.Name]
 
 	// Actions before prayer time
@@ -274,18 +303,7 @@ func athaanCaller(ctx context.Context, prayer PrayerDuration, config Config) {
 	if before_reminder > 0 {
 		select {
 		case <-time.After(before_reminder):
-			message = fmt.Sprintf("%d mins until %s Atha'an", prayer_config.Before.Reminder, prayer.Name)
-			beeep.Notify(prayer_config.Before.Message, message, "")
-			// Play sound before prayer time
-			playMP3(prayer_config.Before.Sound)
-			// Run a command before prayer time
-			before_command := prayer_config.Before.Command
-			if len(before_command) != 0 {
-				err := exec.Command(before_command[0], before_command[1:]...).Run()
-				if err != nil {
-					return
-				}
-			}
+			muezzin(prayer_config.Before, prayer.Name, "%d mins until %s Atha'an")
 		case <-ctx.Done():
 			return
 		}
@@ -295,18 +313,7 @@ func athaanCaller(ctx context.Context, prayer PrayerDuration, config Config) {
 	if prayer.Duration >= 0 {
 		select {
 		case <-time.After(prayer.Duration):
-			message = fmt.Sprintf("%s Atha'an", prayer.Name)
-			beeep.Notify(prayer_config.Message, message, "")
-			// Play sound at prayer time
-			playMP3(prayer_config.Sound)
-			// Run a command at prayer time
-			command := prayer_config.Command
-			if len(command) != 0 {
-				err := exec.Command(command[0], command[1:]...).Run()
-				if err != nil {
-					return
-				}
-			}
+			muezzin(prayer_config.ReminderConfig, prayer.Name, "%s Atha'an is now")
 		case <-ctx.Done():
 			return
 		}
@@ -317,18 +324,7 @@ func athaanCaller(ctx context.Context, prayer PrayerDuration, config Config) {
 	if after_reminder > 0 {
 		select {
 		case <-time.After(after_reminder):
-			message = fmt.Sprintf("Its been %d mins rom %s Atha'an", prayer_config.After.Reminder, prayer.Name)
-			beeep.Notify(prayer_config.After.Message, message, "")
-			// Play sound after the reminder
-			playMP3(prayer_config.After.Sound)
-			// Run a command after the reminder
-			after_command := prayer_config.After.Command
-			if len(after_command) != 0 {
-				err := exec.Command(after_command[0], after_command[1:]...).Run()
-				if err != nil {
-					return
-				}
-			}
+			muezzin(prayer_config.Before, prayer.Name, "%d mins until %s Atha'an")
 		case <-ctx.Done():
 			return
 		}
@@ -444,7 +440,7 @@ func runMain() {
 
 	fmt.Printf("Times: %v\nDurations: %v\n", prayer_times, prayer_durations)
 	for _, p := range prayer_durations {
-		go athaanCaller(ctx, p, config)
+		go athaanScheduler(ctx, p, config)
 	}
 }
 
