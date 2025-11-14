@@ -364,6 +364,9 @@ var prayer_times PrayerTimes
 var prayer_durations []PrayerDuration
 var config Config
 
+var config_path string
+var prayertimes_path string
+
 func runMain() {
 	var err error
 	configDir, err := os.UserConfigDir()
@@ -372,13 +375,13 @@ func runMain() {
 	}
 	configDir = filepath.Join(configDir, "gopray")
 	os.MkdirAll(configDir, 0755)
-	times_filename := filepath.Join(configDir, "prayer_times.json")
-	config_filename := filepath.Join(configDir, "config.json")
+	prayertimes_path = filepath.Join(configDir, "prayer_times.json")
+	config_path = filepath.Join(configDir, "config.json")
 
 	ctx, cancel = context.WithCancel(context.Background())
 
 	// Read saved prayer times json file
-	prayer_times, err = readJSON[PrayerTimes](times_filename)
+	prayer_times, err = readJSON[PrayerTimes](prayertimes_path)
 	// If reading failed OR prayer times not up to date
 	// Then update it
 	if err != nil || prayer_times.LastUpdate != time.Now().Format("02-01-2006") {
@@ -414,23 +417,23 @@ func runMain() {
 		prayer_times.CityName = cityName
 		prayer_times.CityID = cityId
 		// Save prayer times in a json file
-		err = saveJSON(times_filename, prayer_times)
+		err = saveJSON(prayertimes_path, prayer_times)
 		if err != nil {
-			fmt.Printf("Error saving prayer times to %s: %v\n", times_filename, err)
+			fmt.Printf("Error saving prayer times to %s: %v\n", prayertimes_path, err)
 			return
 		}
 	}
 
 	// Read config or create it if it doesn't exist
-	config, err = readJSON[Config](config_filename)
+	config, err = readJSON[Config](config_path)
 	if err != nil {
 		// Create default config
 		config = defaultConfig()
 
 		// Save config in a json file
-		err = saveJSON(config_filename, config)
+		err = saveJSON(config_path, config)
 		if err != nil {
-			fmt.Printf("Error saving config to %s: %v\n", config_filename, err)
+			fmt.Printf("Error saving config to %s: %v\n", config_path, err)
 			return
 		}
 	}
@@ -484,6 +487,21 @@ func onReady() {
 		format := fmt.Sprintf("%%-%ds\t %%s", 25-len(prayer.Name))
 		systray.AddMenuItem(fmt.Sprintf(format, prayer.Name, prayer.Time), "")
 	}
+	systray.AddSeparator()
+
+	// Shortcut to edit config
+	edit_config_menu := systray.AddMenuItem("Edit config", "")
+	edit_config_menu.Click(func() {
+		// Open config file in default text editor
+		switch runtime.GOOS {
+		case "windows":
+			exec.Command("notepad.exe", config_path).Start()
+		case "darwin":
+			exec.Command("open", "-e", config_path).Start()
+		case "linux":
+			exec.Command("xdg-open", config_path).Start()
+		}
+	})
 	systray.AddSeparator()
 
 	// Add Quit button
