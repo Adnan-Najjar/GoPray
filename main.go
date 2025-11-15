@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -191,12 +192,11 @@ func defaultConfig() Config {
 	config["Fajr"] = PrayerConfig{
 		ReminderConfig: ReminderConfig{
 			Message: "Fajr Atha'an",
-			Sound:   "",
+			Sound:   "athaan",
 		},
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Fajr Iqa'ama",
-			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
@@ -204,11 +204,10 @@ func defaultConfig() Config {
 	config["Sunrise"] = PrayerConfig{
 		ReminderConfig: ReminderConfig{
 			Message: "Sun has risen",
-			Sound:   "",
+			Sound:   "athaan",
 		},
 		After: ReminderConfig{
 			Reminder: 20,
-			Sound:    "",
 			Message:  "Duhaa time started",
 		},
 	}
@@ -218,15 +217,14 @@ func defaultConfig() Config {
 		Before: ReminderConfig{
 			Reminder: 90,
 			Message:  "Duhaa prayer",
-			Sound:    "",
 		},
 		ReminderConfig: ReminderConfig{
 			Message: "Zuhr Atha'an",
+			Sound:   "athaan",
 		},
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Zuhr Iqa'ama",
-			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
@@ -234,12 +232,11 @@ func defaultConfig() Config {
 	config["Asr"] = PrayerConfig{
 		ReminderConfig: ReminderConfig{
 			Message: "Asr Atha'an",
-			Sound:   "",
+			Sound:   "athaan",
 		},
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Asr Iqa'ama",
-			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
@@ -248,15 +245,14 @@ func defaultConfig() Config {
 		Before: ReminderConfig{
 			Reminder: 5,
 			Message:  "Maghrib Atha'an after 5 minutes",
-			Sound:    "",
 		},
 		ReminderConfig: ReminderConfig{
 			Message: "Maghrib Atha'an",
+			Sound:   "athaan",
 		},
 		After: ReminderConfig{
 			Reminder: 5,
 			Message:  "Maghrib Iqa'ama",
-			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
@@ -264,12 +260,11 @@ func defaultConfig() Config {
 	config["Isha"] = PrayerConfig{
 		ReminderConfig: ReminderConfig{
 			Message: "Isha Atha'an",
-			Sound:   "",
+			Sound:   "athaan",
 		},
 		After: ReminderConfig{
 			Reminder: 15,
 			Message:  "Isha Iqa'ama",
-			Sound:    "",
 			Command:  screenLocker,
 		},
 	}
@@ -278,17 +273,15 @@ func defaultConfig() Config {
 }
 
 // Sends a notification with sound and runs the command
-func muezzin(config ReminderConfig, name string, format string) {
-	opts := []any{name}
-	if config.Reminder != 0 {
-		opts = []any{config.Reminder, name}
+func muezzin(reminderConfig ReminderConfig) {
+	// Send notification
+	if len(reminderConfig.Message) > 0 {
+		beeep.Notify(beeep.AppName, reminderConfig.Message, getIcon())
 	}
-	message := fmt.Sprintf(format, opts...)
-	beeep.Notify(config.Message, message, "")
 	// Play sound
-	playMP3(config.Sound)
+	playMP3(reminderConfig.Sound)
 	// Run a command if exists
-	command := config.Command
+	command := reminderConfig.Command
 	if len(command) != 0 {
 		err := exec.Command(command[0], command[1:]...).Run()
 		if err != nil {
@@ -304,30 +297,28 @@ func athaanScheduler(ctx context.Context, prayer PrayerDuration) {
 	before_reminder := prayer.Duration - time.Duration(prayer_config.Before.Reminder)*time.Minute
 	if before_reminder > 0 {
 		select {
-		case <-time.After(before_reminder):
-			muezzin(prayer_config.Before, prayer.Name, "%d mins until %s Atha'an")
+		case <-time.After(prayer.Duration - before_reminder):
+			muezzin(prayer_config.Before)
 		case <-ctx.Done():
 			return
 		}
 	}
 
 	// Actions at prayer time
-	if prayer.Duration >= 0 {
-		select {
-		case <-time.After(prayer.Duration):
-			muezzin(prayer_config.ReminderConfig, prayer.Name, "%s Atha'an is now")
-			next_prayer = prayer
-		case <-ctx.Done():
-			return
-		}
+	select {
+	case <-time.After(prayer.Duration):
+		muezzin(prayer_config.ReminderConfig)
+		next_prayer = prayer
+	case <-ctx.Done():
+		return
 	}
 
 	// Actions after prayer time
 	after_reminder := time.Duration(prayer_config.After.Reminder) * time.Minute
 	if after_reminder > 0 {
 		select {
-		case <-time.After(after_reminder):
-			muezzin(prayer_config.Before, prayer.Name, "%d mins until %s Atha'an")
+		case <-time.After(prayer.Duration + after_reminder):
+			muezzin(prayer_config.After)
 		case <-ctx.Done():
 			return
 		}
@@ -391,7 +382,7 @@ func runMain() {
 		// Get city name using ipapi.co
 		cityName, err := getCityName()
 		if err != nil {
-			fmt.Printf("Error getting city name: %v\n", err)
+			log.Printf("ERROR: fetching city name: %v", err)
 			return
 		}
 
@@ -403,7 +394,7 @@ func runMain() {
 			// Get city ID using geonames.org api
 			cityId, err = getCityID(cityName)
 			if err != nil {
-				fmt.Printf("Error getting city id: %v\n", err)
+				log.Printf("ERROR: fetching city id: %v", err)
 				return
 			}
 		}
@@ -411,7 +402,7 @@ func runMain() {
 		// Get prayer times using muslimpro.com
 		prayer_times, err = getPrayerTimes(cityId)
 		if err != nil {
-			fmt.Printf("Error getting prayer times: %v\n", err)
+			log.Printf("ERROR: fetching prayer times: %v", err)
 			return
 		}
 
@@ -421,7 +412,7 @@ func runMain() {
 		// Save prayer times in a json file
 		err = saveJSON(prayertimes_path, prayer_times)
 		if err != nil {
-			fmt.Printf("Error saving prayer times to %s: %v\n", prayertimes_path, err)
+			log.Printf("ERROR: saving JSON: %v", err)
 			return
 		}
 	}
@@ -435,7 +426,7 @@ func runMain() {
 		// Save config in a json file
 		err = saveJSON(config_path, config)
 		if err != nil {
-			fmt.Printf("Error saving config to %s: %v\n", config_path, err)
+			log.Printf("ERROR: saving JSON: %v", err)
 			return
 		}
 	}
@@ -443,11 +434,11 @@ func runMain() {
 	// Calculate durations (time until prayer) and sort them
 	prayer_durations, err = getPrayerDurations(prayer_times)
 	if err != nil {
-		fmt.Printf("Error getting durations: %v", err)
+		log.Printf("ERROR: calculating durations: %v", err)
 		return
 	}
 
-	fmt.Printf("Times: %v\nDurations: %v\n", prayer_times, prayer_durations)
+	log.Printf("Times: %v\nDurations: %v", prayer_times, prayer_durations)
 	for _, p := range prayer_durations {
 		go athaanScheduler(ctx, p)
 	}
@@ -455,7 +446,7 @@ func runMain() {
 
 func onReady() {
 	systray.SetIcon(getIcon())
-	systray.SetTitle("GoPray")
+	systray.SetTitle(beeep.AppName)
 	systray.SetTooltip("Prayer Times App")
 	// Open on left click
 	systray.SetOnClick(func(menu systray.IMenu) {
@@ -564,10 +555,19 @@ func onExit() {
 func playMP3(filePath string) {
 	var file io.ReadCloser
 	var err error
-	if len(filePath) <= 0 {
+	// Use saved sounds if given file is not .mp3
+	if !strings.HasSuffix(filePath, ".mp3") {
+		filePath = fmt.Sprintf("assets/%s.mp3", filePath)
 		file, err = assetsFS.Open(filePath)
-	} else {
+		if err != nil {
+			return
+		}
+	} else { // Use sounds inside config dir
+		filePath = filepath.Join(config_path, filePath)
 		file, err = os.Open(filePath)
+		if err != nil {
+			return
+		}
 	}
 	defer file.Close()
 
@@ -598,13 +598,13 @@ func playMP3(filePath string) {
 func getIcon() []byte {
 	iconWin, err := assetsFS.ReadFile("assets/icon.ico")
 	if err != nil {
-		fmt.Printf("Icon failed: %v:", err)
+		log.Printf("ERROR: loading ICO icon: %v", err)
 		return nil
 	}
 
 	icon, err := assetsFS.ReadFile("assets/icon.png")
 	if err != nil {
-		fmt.Printf("Icon failed: %v:", err)
+		log.Printf("ERROR: loading PNG icon: %v", err)
 		return nil
 	}
 
