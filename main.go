@@ -67,6 +67,7 @@ type Config map[string]PrayerConfig
 type PrayerDuration struct {
 	Name     string
 	Duration time.Duration
+	state    string
 }
 
 var next_prayer PrayerDuration
@@ -290,41 +291,6 @@ func muezzin(reminderConfig ReminderConfig) {
 	}
 }
 
-func athaanScheduler(ctx context.Context, prayer PrayerDuration) {
-	prayer_config := config[prayer.Name]
-
-	// Actions before prayer time
-	before_reminder := prayer.Duration - time.Duration(prayer_config.Before.Reminder)*time.Minute
-	if before_reminder > 0 {
-		select {
-		case <-time.After(prayer.Duration - before_reminder):
-			muezzin(prayer_config.Before)
-		case <-ctx.Done():
-			return
-		}
-	}
-
-	// Actions at prayer time
-	select {
-	case <-time.After(prayer.Duration):
-		muezzin(prayer_config.ReminderConfig)
-		next_prayer = prayer
-	case <-ctx.Done():
-		return
-	}
-
-	// Actions after prayer time
-	after_reminder := time.Duration(prayer_config.After.Reminder) * time.Minute
-	if after_reminder > 0 {
-		select {
-		case <-time.After(prayer.Duration + after_reminder):
-			muezzin(prayer_config.After)
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 func getPrayerDurations(prayer_times PrayerTimes) ([]PrayerDuration, error) {
 	var prayer_durations []PrayerDuration
 	for _, prayer := range prayer_times.Times {
@@ -335,11 +301,25 @@ func getPrayerDurations(prayer_times PrayerTimes) ([]PrayerDuration, error) {
 			return nil, err
 		}
 		// Use current date with parsed prayer time
-		prayer_time_date := time.Date(now.Year(), now.Month(), now.Day(), prayer_time.Hour(), prayer_time.Minute(), 0, 0, now.Location())
+		prayer_time = time.Date(now.Year(), now.Month(), now.Day(), prayer_time.Hour(), prayer_time.Minute(), 0, 0, now.Location())
+		prayer_duration := prayer_time.Sub(now)
 
-		if now.Before(prayer_time_date) {
-			duration := prayer_time_date.Sub(now)
-			prayer_durations = append(prayer_durations, PrayerDuration{Name: prayer.Name, Duration: duration})
+		var duration time.Duration
+
+		before_reminder := time.Duration(config[prayer.Name].Before.Reminder) * time.Minute
+		duration = prayer_duration - before_reminder
+		if duration > 0 && before_reminder > 0 {
+			prayer_durations = append(prayer_durations, PrayerDuration{Name: prayer.Name, Duration: duration, state: "before"})
+		}
+
+		if prayer_duration > 0 {
+			prayer_durations = append(prayer_durations, PrayerDuration{Name: prayer.Name, Duration: prayer_duration, state: "at"})
+		}
+
+		after_reminder := time.Duration(config[prayer.Name].After.Reminder) * time.Minute
+		duration = prayer_duration + after_reminder
+		if duration > 0 && after_reminder > 0 {
+			prayer_durations = append(prayer_durations, PrayerDuration{Name: prayer.Name, Duration: duration, state: "after"})
 		}
 	}
 
@@ -438,9 +418,27 @@ func runMain() {
 		return
 	}
 
-	log.Printf("Times: %v\nDurations: %v", prayer_times, prayer_durations)
+	log.Printf("Config: %v\nTimes: %v\nDurations: %v", config, prayer_times, prayer_durations)
 	for _, p := range prayer_durations {
-		go athaanScheduler(ctx, p)
+		go func(ctx context.Context, p PrayerDuration) {
+			// Actions at prayer time
+			select {
+			case <-time.After(p.Duration):
+				switch p.state {
+				case "before":
+					muezzin(config[p.Name].Before)
+				case "at":
+					muezzin(config[p.Name].ReminderConfig)
+					next_prayer = p
+					log.Printf("next_prayer: %v\n", next_prayer)
+				case "after":
+					muezzin(config[p.Name].After)
+				}
+			case <-ctx.Done():
+				log.Println("Child killed...")
+				return
+			}
+		}(ctx, p)
 	}
 }
 
@@ -482,44 +480,43 @@ func onReady() {
 	// Add each prayer time
 	for _, prayer := range prayer_times.Times {
 		format := fmt.Sprintf("%%-%ds\t %%s", 20-len(prayer.Name))
+		summary := systray.AddMenuItem(fmt.Sprintf(format, prayer.Name, prayer.Time), "")
+
 		// Create summary of current config
-		var prayer_config string
 		reminder := config[prayer.Name].ReminderConfig
 		if reminder.Reminder > 0 {
-			prayer_config += fmt.Sprintf("%d mins\n", reminder.Reminder)
+			summary.AddSubMenuItem(fmt.Sprintf("%d mins", reminder.Reminder), "")
 		}
 		if reminder.Message != "" {
-			prayer_config += fmt.Sprintf("%s\n", reminder.Message)
+			summary.AddSubMenuItem(fmt.Sprintf("%s", reminder.Message), "")
 		}
 		if reminder.Command != nil {
-			prayer_config += fmt.Sprintf("%v\n", reminder.Command)
+			summary.AddSubMenuItem(fmt.Sprintf("%v", reminder.Command), "")
 		}
 
 		before := config[prayer.Name].Before
 		if before.Reminder > 0 {
-			prayer_config += "Before:\n"
-			prayer_config += fmt.Sprintf("\t%d mins\n", before.Reminder)
+			summary.AddSubMenuItem("Before:", "")
+			summary.AddSubMenuItem(fmt.Sprintf("\t%d mins", before.Reminder), "")
 		}
 		if before.Message != "" {
-			prayer_config += fmt.Sprintf("\t%s\n", before.Message)
+			summary.AddSubMenuItem(fmt.Sprintf("\t%s", before.Message), "")
 		}
 		if before.Command != nil {
-			prayer_config += fmt.Sprintf("\t%v\n", before.Command)
+			summary.AddSubMenuItem(fmt.Sprintf("\t%v", before.Command), "")
 		}
 
 		after := config[prayer.Name].After
 		if after.Reminder > 0 {
-			prayer_config += "After:\n"
-			prayer_config += fmt.Sprintf("\t%d mins\n", after.Reminder)
+			summary.AddSubMenuItem("After:", "")
+			summary.AddSubMenuItem(fmt.Sprintf("\t%d mins", after.Reminder), "")
 		}
 		if after.Message != "" {
-			prayer_config += fmt.Sprintf("\t%s\n", after.Message)
+			summary.AddSubMenuItem(fmt.Sprintf("\t%s", after.Message), "")
 		}
 		if after.Command != nil {
-			prayer_config += fmt.Sprintf("\t%v\n", after.Command)
+			summary.AddSubMenuItem(fmt.Sprintf("\t%v", after.Command), "")
 		}
-
-		systray.AddMenuItem(fmt.Sprintf(format, prayer.Name, prayer.Time), "").AddSubMenuItem(prayer_config, "")
 	}
 	systray.AddSeparator()
 

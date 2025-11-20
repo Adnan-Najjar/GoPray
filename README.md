@@ -46,7 +46,7 @@ The `config.json` file contains settings for each prayer:
 
 - **Message**: Notification text for the reminder.
 - **Command**: Array of strings for a command to run (e.g., screen lock command).
-- **Sound**: Path to a custom MP3 file (leave empty for default athaan).
+- **Sound**: The sound played use builtins like "athaan" or add custom sounds to your config directory
 - **Before/After**: Reminders before or after the prayer time.
 - **Reminder**: Minutes before/after to trigger the reminder (0 to disable).
 
@@ -54,9 +54,6 @@ You must restart to apply changes.
 
 ## TODO
 
-- [x] Add an indicator that shows time until next prayer
-- [x] Implement logging for debugging
 - [ ] Add unit tests and improve error handling
-- [ ] Add more sound options and volume control
 - [ ] Add localization for notifications in different languages
 - [ ] Add GUI for configuration instead of editing JSON
