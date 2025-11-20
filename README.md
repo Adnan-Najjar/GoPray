@@ -1,6 +1,6 @@
 # GoPray
 
-Lightweight prayer times program that can be customized with reminders, sounds and commands after and before an Atha'an 
+Lightweight prayer times program that can be customized with reminders, sounds and commands after and before an Atha'an.
 
 ## Features
 
@@ -9,7 +9,7 @@ Lightweight prayer times program that can be customized with reminders, sounds a
 - Notifications for prayer times and reminders
 - Plays athaan sound (included)
 - Configurable reminders and commands (e.g., screen lock)
-- Cross-platform support (Windows, Linux, macOS)
+- Cross-platform support (Windows, Linux)
 
 ## Configuration
 
