@@ -340,7 +340,7 @@ var config Config
 var config_path string
 var prayertimes_path string
 
-func runMain() {
+func runMain(parentCtx context.Context) {
 	var err error
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -351,7 +351,11 @@ func runMain() {
 	prayertimes_path = filepath.Join(configDir, "prayer_times.json")
 	config_path = filepath.Join(configDir, "config.json")
 
-	ctx, cancel = context.WithCancel(context.Background())
+	// Cleanup
+	if cancel != nil {
+		cancel()
+	}
+	ctx, cancel = context.WithCancel(parentCtx)
 
 	// Read saved prayer times json file
 	prayer_times, err = readJSON[PrayerTimes](prayertimes_path)
@@ -462,12 +466,13 @@ func onReady() {
 		next_prayer_menu := systray.AddMenuItem("", "")
 		go func() {
 			for {
-				var until string
-				if next_prayer.Duration.Minutes() < 1 {
-					until = strings.Split(next_prayer.Duration.String(), ".")[0] + "s"
-				} else {
-					until = strings.Split(next_prayer.Duration.String(), "m")[0] + "m"
+				// Check if prayer times need updating
+				lastUpdate, err := time.Parse("02-01-2006", prayer_times.LastUpdate)
+				if err != nil || lastUpdate.Before(time.Now().Truncate(24*time.Hour)) {
+					runMain(ctx) // Update the times
 				}
+
+				until := fmt.Sprintf("%s", next_prayer.Duration.Truncate(time.Second).String())
 				message := fmt.Sprintf("%s until %s", until, next_prayer.Name)
 				next_prayer_menu.SetTitle(message)
 				time.Sleep(time.Minute)
@@ -614,7 +619,7 @@ func getIcon() []byte {
 
 func main() {
 	beeep.AppName = "GoPray"
-	runMain()
+	runMain(context.Background())
 
 	// Handle signals to quit gracefully
 	sigChan := make(chan os.Signal, 1)
