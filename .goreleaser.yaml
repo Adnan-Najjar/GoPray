@@ -1,0 +1,61 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+archives:
+  - formats: [ 'binary' ]
+
+builds:
+  # Windows AMD64
+  - id: gopray-windows-amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-w64-mingw32-gcc
+    goos:
+      - windows
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+  # Linux AMD64
+  - id: gopray-linux-amd64
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+checksum:
+  name_template: 'checksums.txt'
+
+release:
+  github:
+    owner: Adnan-Najjar
+    name: GoPray
+  draft: false
+  prerelease: false
+  name_template: '{{.Version}}'
+  header: |
+    ## GoPray {{ .Tag }} Release
+
+    Go pray :)
+
+    ### Installation
+
+    install the binary bellow then run it at startup or use these
+
+    #### Windows
+    ```powershell
+    Copy-Item GoPray.exe "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup" 
+    ```
+
+    #### Linux
+    use crontab `@reboot GoPray` or systemd service unit
