@@ -327,7 +327,13 @@ func getPrayerDurations(prayer_times PrayerTimes) ([]PrayerDuration, error) {
 		return prayer_durations[i].Duration < prayer_durations[j].Duration
 	})
 	if len(prayer_durations) > 0 {
-		next_prayer = prayer_durations[0]
+		for _, pd := range prayer_durations {
+			// Only use the prayer time not the before or after
+			if pd.state == "at" {
+				next_prayer = pd
+				break
+			}
+		}
 	}
 
 	return prayer_durations, nil
