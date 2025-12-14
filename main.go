@@ -291,6 +291,85 @@ func muezzin(reminderConfig ReminderConfig) {
 	}
 }
 
+func updateNextPrayer(ctx context.Context, menu *systray.MenuItem) {
+	ticker := time.NewTicker(time.Second)
+	ticker_long := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	var currentTimer *time.Timer
+	var startTime time.Time
+
+	// Initialize timer for first prayer
+	if len(prayer_durations) > 0 {
+		currentTimer = time.NewTimer(prayer_durations[0].Duration)
+		startTime = time.Now()
+	}
+	defer func() {
+		if currentTimer != nil {
+			currentTimer.Stop()
+		}
+	}()
+
+	for {
+		select {
+		case <-currentTimer.C:
+			if len(prayer_durations) > 0 {
+				// Handle current prayer action
+				currentPrayer := prayer_durations[0]
+				switch currentPrayer.state {
+				case "before":
+					muezzin(config[currentPrayer.Name].Before)
+				case "at":
+					muezzin(config[currentPrayer.Name].ReminderConfig)
+					next_prayer = currentPrayer
+					log.Printf("next_prayer: %v\n", next_prayer)
+				case "after":
+					muezzin(config[currentPrayer.Name].After)
+				}
+
+				// Remove completed prayer from global array
+				prayer_durations = prayer_durations[1:]
+
+				// Set timer for next prayer
+				if len(prayer_durations) > 0 {
+					currentTimer.Reset(prayer_durations[0].Duration)
+					startTime = time.Now()
+				}
+			}
+
+		case <-ticker.C:
+			if len(prayer_durations) > 0 {
+				// Calculate remaining time for current prayer
+				elapsed := time.Since(startTime)
+				remaining := prayer_durations[0].Duration - elapsed
+				if remaining > 0 {
+					until := fmt.Sprintf("%s", remaining.Truncate(time.Second).String())
+					message := fmt.Sprintf("%s until %s", until, prayer_durations[0].Name)
+					menu.SetTitle(message)
+				}
+			}
+
+		case <-ticker_long.C:
+			// Check if prayer times needs updating
+			lastUpdate, err := time.Parse("02-01-2006", prayer_times.LastUpdate)
+			if err != nil || lastUpdate.Before(time.Now().Truncate(24*time.Hour)) {
+				runMain(ctx) // Update the times
+				// Restart timer with new prayer times
+				if len(prayer_durations) > 0 {
+					if currentTimer != nil {
+						currentTimer.Stop()
+					}
+					currentTimer = time.NewTimer(prayer_durations[0].Duration)
+					startTime = time.Now()
+				}
+			}
+
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
 func getPrayerDurations(prayer_times PrayerTimes) ([]PrayerDuration, error) {
 	var prayer_durations []PrayerDuration
 	for _, prayer := range prayer_times.Times {
@@ -429,27 +508,6 @@ func runMain(parentCtx context.Context) {
 	}
 
 	log.Printf("Config: %v\nTimes: %v\nDurations: %v", config, prayer_times, prayer_durations)
-	for _, p := range prayer_durations {
-		go func(ctx context.Context, p PrayerDuration) {
-			// Actions at prayer time
-			select {
-			case <-time.After(p.Duration):
-				switch p.state {
-				case "before":
-					muezzin(config[p.Name].Before)
-				case "at":
-					muezzin(config[p.Name].ReminderConfig)
-					next_prayer = p
-					log.Printf("next_prayer: %v\n", next_prayer)
-				case "after":
-					muezzin(config[p.Name].After)
-				}
-			case <-ctx.Done():
-				log.Println("Child killed...")
-				return
-			}
-		}(ctx, p)
-	}
 }
 
 func onReady() {
@@ -470,21 +528,7 @@ func onReady() {
 	if next_prayer != (PrayerDuration{}) {
 		// Show time until next prayer
 		next_prayer_menu := systray.AddMenuItem("", "")
-		go func() {
-			for {
-				// Check if prayer times need updating
-				lastUpdate, err := time.Parse("02-01-2006", prayer_times.LastUpdate)
-				if err != nil || lastUpdate.Before(time.Now().Truncate(24*time.Hour)) {
-					runMain(ctx) // Update the times
-				}
-
-				until := fmt.Sprintf("%s", next_prayer.Duration.Truncate(time.Second).String())
-				message := fmt.Sprintf("%s until %s", until, next_prayer.Name)
-				next_prayer_menu.SetTitle(message)
-				time.Sleep(time.Minute)
-				next_prayer.Duration = prayer_durations[0].Duration
-			}
-		}()
+		go updateNextPrayer(ctx, next_prayer_menu)
 		systray.AddSeparator()
 	}
 
